@@ -1,0 +1,191 @@
+#define BLYNK_TEMPLATE_ID           "xxxxxxxx"  //Enter the template ID
+#define BLYNK_DEVICE_NAME           "RFID DOOR LOCK"
+#define BLYNK_AUTH_TOKEN            "xxxxxxxxxxxx"   // Enter the token
+
+
+// Comment this out to disable prints and save space
+#include <SPI.h>
+#include <MFRC522.h>
+#include <Servo.h>
+#define BLYNK_PRINT Serial
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#define SS_PIN D4
+#define RST_PIN D3
+#define LED_G D1 //define green LED pin
+#define LED_R D2 //define red LED
+//#define RELAY D0 //relay pin
+#define BUZZER D8 //buzzer pin
+#define ACCESS_DELAY 2000
+#define DENIED_DELAY 1000
+MFRC522 mfrc522(SS_PIN, RST_PIN);   // Create MFRC522 instance.
+Servo myservo;
+
+char auth[] = BLYNK_AUTH_TOKEN;
+
+// Your WiFi credentials.
+// Set password to "" for open networks.
+char ssid[] = "xxxxx";
+char pass[] = "------";
+
+BlynkTimer timer;
+int fflag = 0; 
+int eflag = 0; 
+int jflag=0; 
+WidgetTerminal terminal(V2);
+
+// This function is called every time the Virtual Pin 0 state changes
+BLYNK_WRITE(V3)
+{
+   fflag = param.asInt(); // assigning incoming value from pin V3 to a variable
+   Blynk.virtualWrite(V2, fflag );
+}
+// in Blynk app writes values to the Virtual Pin 4
+
+BLYNK_WRITE(V4)
+{
+   eflag = param.asInt(); // assigning incoming value from pin V4 to a variable
+}
+BLYNK_WRITE(V5)
+{
+   jflag = param.asInt(); // assigning incoming value from pin V4 to a variable
+}
+
+
+// This function is called every time the device is connected to the Blynk.Cloud
+BLYNK_CONNECTED()
+{
+  // Change Web Link Button message to "Congratulations!"
+  Blynk.setProperty(V3, "offImageUrl", "https://static-image.nyc3.cdn.digitaloceanspaces.com/general/fte/congratulations.png");
+  Blynk.setProperty(V3, "onImageUrl",  "https://static-image.nyc3.cdn.digitaloceanspaces.com/general/fte/congratulations_pressed.png");
+  //Blynk.setProperty(V3, "url", "https://docs.blynk.io/en/getting-started/what-do-i-need-to-blynk/how-quickstart-device-was-made");
+}
+
+
+// This function sends Arduino's uptime every second to Virtual Pin 2.
+void myTimerEvent()
+{
+  // You can send any value at any time.
+  // Please don't send more that 10 values per second.
+  //Blynk.virtualWrite(V2, millis() / 1000);
+}
+
+void setup()
+{
+  // Debug console
+  Serial.begin(115200);
+
+  Blynk.begin(auth, ssid, pass);
+  // You can also specify server:
+  //Blynk.begin(auth, ssid, pass, "blynk.cloud", 80);
+  //Blynk.begin(auth, ssid, pass, IPAddress(192,168,1,100), 8080);
+
+  // Setup a function to be called every second
+  timer.setInterval(1000L, myTimerEvent);
+  SPI.begin();          // Initiate  SPI bus
+  mfrc522.PCD_Init();   // Initiate MFRC522
+  pinMode(LED_G, OUTPUT);
+  pinMode(LED_R, OUTPUT);
+  //pinMode(RELAY, OUTPUT);
+  pinMode(BUZZER, OUTPUT);
+  noTone(BUZZER);
+  //digitalWrite(RELAY, HIGH);
+  myservo.attach(16); 
+  Serial.println("Put your card to the reader...");
+  Serial.println();
+  timer.setInterval(1000L, iot_rfid);
+}
+
+void loop()
+{
+  Blynk.run();
+  timer.run();
+  // You can inject your own code or combine it with other sketches.
+  // Check other examples on how to communicate with Blynk. Remember
+  // to avoid delay() function!
+}
+void iot_rfid()
+{
+  myservo.write(0); 
+  if ( ! mfrc522.PICC_IsNewCardPresent()) 
+  {
+    return;
+  }
+  // Select one of the cards
+  if ( ! mfrc522.PICC_ReadCardSerial()) 
+  {
+    return;
+  }
+  //Show UID on serial monitor
+  Serial.print("UID tag :");
+  String content= "";
+  byte letter;
+  for (byte i = 0; i < mfrc522.uid.size; i++) 
+  {
+     Serial.print(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " ");
+     Serial.print(mfrc522.uid.uidByte[i], HEX);
+     content.concat(String(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " "));
+     content.concat(String(mfrc522.uid.uidByte[i], HEX));
+  }
+  Serial.println();
+  Serial.print("Message : ");
+  content.toUpperCase();
+  if ((content.substring(1) == "01 94 E1 26")&&(fflag==1)) //change here the UID of the card/cards that you want to give access
+  {
+    Serial.println("Authorized access");
+    Serial.println("Mck");
+    Blynk.virtualWrite(V2, "Mck" );
+    delay(500);
+    digitalWrite(LED_G, HIGH);
+    tone(BUZZER, 10,50);
+  myservo.write(180);
+    delay(ACCESS_DELAY);
+    delay(5000);
+    noTone(BUZZER);
+    digitalWrite(LED_G, LOW);
+    myservo.write(0);
+  }
+  else if ((content.substring(1) == "60 27 5B 21")&&(eflag==1)) //change here the UID of the card/cards that you want to give access
+  {
+    Serial.println("Authorized access");
+    Serial.println("Ashley");
+    Blynk.virtualWrite(V2, "Ashley" );
+    digitalWrite(LED_G, HIGH);
+    tone(BUZZER, 10,50);
+    myservo.write(180);
+    delay(ACCESS_DELAY);
+    delay(5000);
+    noTone(BUZZER);
+    digitalWrite(LED_G, LOW);
+    myservo.write(0);
+  }
+  else if ((content.substring(1) == "30 15 B5 20")&&(jflag==1)) //change here the UID of the card/cards that you want to give access
+  {
+    Serial.println("Authorized access");
+    Serial.println("Linard");
+    Blynk.virtualWrite(V2, "Linard" );
+    delay(500);
+    digitalWrite(LED_G, HIGH);
+    tone(BUZZER, 10,50);
+    myservo.write(180);
+    delay(ACCESS_DELAY);
+    delay(5000);
+    noTone(BUZZER);
+    digitalWrite(LED_G, LOW);
+    myservo.write(0);
+  }
+ 
+ else   {
+    Serial.println(" Access denied");
+    Blynk.virtualWrite(V2, "Unauthorized" );
+    digitalWrite(LED_R, HIGH);
+    tone(BUZZER, 10);
+    delay(DENIED_DELAY);
+    
+    tone(BUZZER, 300);
+    digitalWrite(LED_R, LOW);
+    noTone(BUZZER);
+  }
+}
